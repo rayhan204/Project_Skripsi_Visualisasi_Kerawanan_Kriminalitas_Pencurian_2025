@@ -1,0 +1,9 @@
+matplotlib = heatmap KDE, gambar untuk Bab IV (skripsi)
+numpy → perhitungan KDE, RMSE, MAPE
+pandas → olah data CSV kriminalitas
+geopandas → baca GeoJSON, data spasial
+shapely → operasi geometri (centroid, jarak)
+pyproj → transformasi CRS ke UTM (meter)
+folium → peta interaktif (Leaflet)
+streamlit → web app sederhana (sesuai proposal)
+streamlit-folium → integrasi peta ke web
