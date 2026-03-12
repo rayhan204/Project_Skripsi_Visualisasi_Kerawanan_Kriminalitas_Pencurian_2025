@@ -17,7 +17,7 @@ import rasterio.mask
 st.set_page_config(layout="wide")
 
 st.markdown("""
-<h2>Webmap Detail Hotspot Kriminalitas</h2>
+<h2>Webmap Detail Hotspot Kriminalitas Pencurian Di Purbalingga 2025</h2>
 <p>Kernel Density Estimation (KDE)</p>
 """, unsafe_allow_html=True)
 
@@ -261,4 +261,4 @@ colormap.add_to(m)
 
 folium.LayerControl(collapsed=False).add_to(m)
 
-st_folium(m,width=1200,height=650)
+st_folium(m, use_container_width=True, height=550)
