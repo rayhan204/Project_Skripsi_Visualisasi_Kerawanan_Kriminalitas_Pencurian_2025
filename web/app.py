@@ -5,7 +5,6 @@ import rasterio
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import branca.colormap as cm
 from folium.raster_layers import ImageOverlay
 from streamlit_folium import st_folium
 from rasterio.warp import calculate_default_transform, reproject, Resampling
@@ -22,16 +21,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =====================================================
-# FUNGSI KLASIFIKASI
+# FUNGSI
 # =====================================================
 def classify(values):
-
     q = np.quantile(values,[0.2,0.4,0.6,0.8])
-
     labels=[]
-
     for v in values:
-
         if v >= q[3]:
             labels.append("Sangat Rawan")
         elif v >= q[2]:
@@ -42,9 +37,34 @@ def classify(values):
             labels.append("Cukup Aman")
         else:
             labels.append("Aman")
-
     return labels
 
+# kode desa (manual biar tidak bentrok)
+kode_desa = {
+    "kalialang": "KA",
+    "kalikabong": "KK",
+    "purbalingga lor": "PL",
+    "bantarbarang": "BB",
+    "brobot": "BR",
+    "kradenan": "KR",
+    "bojong": "BJG",
+    "kembaran kulon": "KKL",
+    "karangjambe": "KJ",
+    "bojongsari": "BJS",
+    "sokanegara": "SN",
+    "tidu": "TD",
+    "bukateja": "BT",
+    "pekiringan": "PK",
+    "penaruban": "PN",
+    "panunggalan": "PG",
+    "rabak": "RB",
+    "karanganyar": "KA2",
+    "sinduraja": "SR",
+    "sangkanayu": "SK"
+}
+
+def get_kode(nama):
+    return kode_desa.get(nama.lower(), nama[:2].upper())
 
 # =====================================================
 # LOAD DATA
@@ -55,7 +75,7 @@ crime = crime.dropna(subset=["latitude","longitude"])
 desa = gpd.read_file("data/raw/batas_desa_purbalingga.geojson")
 
 # =====================================================
-# AGREGASI DESA
+# AGREGASI
 # =====================================================
 desa_kde = (
     crime.groupby("desa",as_index=False)
@@ -67,9 +87,6 @@ desa_kde = (
 
 desa_kde["kelas_kerawanan"] = classify(desa_kde["rata_kde"].values)
 
-# =====================================================
-# MERGE KE TITIK
-# =====================================================
 crime = crime.merge(
     desa_kde[["desa","kelas_kerawanan","jumlah_kasus"]],
     on="desa",
@@ -77,38 +94,34 @@ crime = crime.merge(
 )
 
 # =====================================================
-# TOOLTIP TITIK
+# TOOLTIP
 # =====================================================
 def tooltip_point(row):
-
     return f"""
     <b>Desa:</b> {row['desa']}<br>
+    <b>Kode:</b> {get_kode(row['desa'])}<br>
     <b>Tingkat Kerawanan:</b> {row['kelas_kerawanan']}<br>
     <b>Nilai KDE:</b> {row['kepadatan_KDE']:.2e}<br>
     <b>Jumlah Kasus Desa:</b> {int(row['jumlah_kasus'])}
     """
 
-
 # =====================================================
-# MERGE DATA DESA
+# GEODATA
 # =====================================================
 desa["desa"] = desa["DESA"].str.lower().str.strip()
 desa_kde["desa"] = desa_kde["desa"].str.lower().str.strip()
 
 desa = desa.merge(desa_kde,on="desa",how="left")
-
 desa["rata_kde"] = desa["rata_kde"].fillna(0)
 desa["jumlah_kasus"] = desa["jumlah_kasus"].fillna(0)
 desa["kelas_kerawanan"] = desa["kelas_kerawanan"].fillna("Aman")
 
-
 # =====================================================
-# LOAD & REPROJECT RASTER
+# RASTER KDE
 # =====================================================
 tif_path="output/kde_surface.tif"
 
 with rasterio.open(tif_path) as src:
-
     desa_utm = desa.to_crs(src.crs)
     kabupaten = desa_utm.dissolve()
 
@@ -118,7 +131,6 @@ with rasterio.open(tif_path) as src:
 
     kde = masked[0]
     src_crs = src.crs
-
 
 dst_crs="EPSG:4326"
 
@@ -141,11 +153,8 @@ reproject(
 )
 
 kde_wgs84=np.nan_to_num(kde_wgs84)
-
 kde_norm = kde_wgs84/np.max(kde_wgs84)
-
-gamma=0.45
-kde_enhanced = np.power(kde_norm,gamma)
+kde_enhanced = np.power(kde_norm,0.45)
 
 left = transform.c
 top = transform.f
@@ -155,16 +164,13 @@ bottom = top + transform.e * height
 bounds_latlon=[[bottom,left],[top,right]]
 
 # =====================================================
-# SIMPAN PNG HEATMAP
+# SIMPAN PNG
 # =====================================================
 png_path="output/kde_surface_visual.png"
 
 fig,ax=plt.subplots(figsize=(6,6))
-
 ax.imshow(kde_enhanced,cmap="hot",origin="lower",alpha=kde_enhanced)
 ax.axis("off")
-
-plt.tight_layout()
 plt.savefig(png_path,dpi=300,transparent=True)
 plt.close(fig)
 
@@ -176,7 +182,7 @@ m=folium.Map(location=[-7.39,109.36],zoom_start=11,tiles=None)
 # =====================================================
 # BASEMAP (TIDAK DIUBAH)
 # =====================================================
-folium.TileLayer("CartoDB positron",name="Carto Light").add_to(m)
+folium.TileLayer("CartoDB positron", name="Carto Light").add_to(m)
 
 folium.TileLayer(
     tiles="https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
@@ -193,9 +199,9 @@ folium.TileLayer(
 ).add_to(m)
 
 # =====================================================
-# LAYER HEATMAP
+# HEATMAP (LAYER)
 # =====================================================
-heat_layer = folium.FeatureGroup(name="Permukaan kerawanan (indeks 0–1)")
+heat_layer = folium.FeatureGroup(name="Permukaan kerawanan")
 
 ImageOverlay(
     image=png_path,
@@ -206,14 +212,12 @@ ImageOverlay(
 heat_layer.add_to(m)
 
 # =====================================================
-# LAYER BATAS DESA
+# BATAS DESA (LAYER)
 # =====================================================
-desa_wgs = desa.to_crs("EPSG:4326")
-
 desa_layer = folium.FeatureGroup(name="Batas Desa (hover)")
 
 folium.GeoJson(
-    desa_wgs,
+    desa.to_crs("EPSG:4326"),
     style_function=lambda x:{
         "fillColor":"none",
         "color":"#00b3ff",
@@ -229,7 +233,7 @@ folium.GeoJson(
 desa_layer.add_to(m)
 
 # =====================================================
-# LAYER TITIK
+# TITIK + LABEL (LAYER)
 # =====================================================
 titik_layer = folium.FeatureGroup(name="Titik & Nilai (hover)")
 
@@ -245,20 +249,67 @@ for _,row in crime.iterrows():
         tooltip=tooltip_point(row)
     ).add_to(titik_layer)
 
+    folium.Marker(
+        location=[row["latitude"],row["longitude"]],
+        icon=folium.DivIcon(
+            html=f"""
+            <div style="
+                font-size:9px;
+                font-weight:bold;
+                background-color:white;
+                padding:1px 3px;
+                border-radius:3px;
+                transform: translate(-50%, -120%);
+                pointer-events: none;
+            ">
+                {get_kode(row['desa'])}
+            </div>
+            """
+        )
+    ).add_to(titik_layer)
+
 titik_layer.add_to(m)
 
 # =====================================================
-# LEGEND
+# LEGEND BARU
 # =====================================================
-colormap = cm.LinearColormap(
-    colors=["#ffffcc","#ffeda0","#feb24c","#f03b20","#bd0026"],
-    vmin=float(np.min(kde_wgs84)),
-    vmax=float(np.max(kde_wgs84)),
-    caption="Kepadatan KDE"
-)
+legend_items = ""
 
-colormap.add_to(m)
+for _, row in desa_kde.iterrows():
+    nama = row["desa"]
+    kode = get_kode(nama)
+    kelas = row["kelas_kerawanan"]
 
+    legend_items += f"{kode} ({nama.title()}) - {kelas}<br>"
+
+legend_html = f"""
+<div style="
+position: fixed;
+top: 80px;
+left: 30px;
+width: 250px;
+background-color: white;
+border:2px solid grey;
+z-index:9999;
+font-size:13px;
+padding: 10px;
+max-height:300px;
+overflow-y:auto;
+box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
+">
+
+<b>Label Desa & Kerawanan</b><br><br>
+
+{legend_items}
+
+</div>
+"""
+
+m.get_root().html.add_child(folium.Element(legend_html))
+
+# =====================================================
+# CONTROL
+# =====================================================
 folium.LayerControl(collapsed=False).add_to(m)
 
 st_folium(m, use_container_width=True, height=550)
